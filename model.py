@@ -98,10 +98,7 @@ class scratch:
     def backward(self, y, y_hat): 
 
         L = self.L
-        a = self.a
-        h = self.h
-        W = self.W
-
+       
         dW = [0]*(L)
         db = [0]*(L)
 
@@ -109,13 +106,13 @@ class scratch:
 
         for i in range(L-1, 0, -1):
 
-            dW[i] = torch.bmm(del_L_a.unsqueeze(dim = 2), h[i-1].unsqueeze(dim = 1)).mean(dim = 0)
+            dW[i] = torch.bmm(del_L_a.unsqueeze(dim = 2), self.h[i-1].unsqueeze(dim = 1)).mean(dim = 0)
             db[i] = del_L_a.mean(dim = 0)
 
             if i == 1 : break
 
-            del_L_h = del_L_a @ W[i]
-            del_L_a = del_L_h * self.d_activation(a[i-1])
+            del_L_h = del_L_a @ self.W[i]
+            del_L_a = del_L_h * self.d_activation(self.a[i-1])
             
         self.del_W = dW
         self.del_b = db
@@ -126,20 +123,14 @@ class scratch:
         lr = self.lr
         weight_decay = self.weight_decay
         L = self.L
-        W = self.W
-        b = self.b
-        dW = self.del_W
-        db = self.del_b
-
+        
         for i in range(L):
 
-            update_W = dW[i] + 2 * weight_decay * W[i]
-            update_b = db[i] 
-            W[i] = W[i] - lr * update_W
-            b[i] = b[i] - lr * update_b
+            update_W = self.del_W[i] + 2 * weight_decay * self.W[i]
+            update_b = self.del_b[i] 
 
-        self.W = W
-        self.b = b
+            self.W[i] = self.W[i] - lr * update_W
+            self.b[i] = self.b[i] - lr * update_b
 
 model_params = {
 
