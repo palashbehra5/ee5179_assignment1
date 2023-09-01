@@ -101,7 +101,6 @@ class scratch:
         a = self.a
         h = self.h
         W = self.W
-        b = self.b
 
         dW = [0]*(L)
         db = [0]*(L)
@@ -110,20 +109,14 @@ class scratch:
 
         for i in range(L-1, 0, -1):
 
-            dW[i] = torch.bmm(del_L_a.unsqueeze(dim = 2), h[i-1].unsqueeze(dim = 1))
-            db[i] = del_L_a
+            dW[i] = torch.bmm(del_L_a.unsqueeze(dim = 2), h[i-1].unsqueeze(dim = 1)).mean(dim = 0)
+            db[i] = del_L_a.mean(dim = 0)
 
             if i == 1 : break
 
             del_L_h = del_L_a @ W[i]
             del_L_a = del_L_h * self.d_activation(a[i-1])
             
-
-        for i in range(1, L):
-
-            dW[i] = dW[i].mean(dim = 0)
-            db[i] = db[i].mean(dim = 0)
-
         self.del_W = dW
         self.del_b = db
 
