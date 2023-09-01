@@ -4,12 +4,11 @@ import os
 import numpy as np
 from skimage import io
 
-BATCH_SIZE = 8
+BATCH_SIZE = 64
 
 transform = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Lambda(lambda x : 0.299 * x[0] + 0.587 * x[1] + 0.114 * x[2]),
-    transforms.Lambda(lambda x : x/x.max())
+    transforms.Lambda(lambda x : 0.299 * x[0] + 0.587 * x[1] + 0.114 * x[2])
 ])
 
 class custom_dataset(Dataset):
@@ -61,4 +60,4 @@ val_dataset = custom_dataset(root_val, transform)
 train_loader = DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, 
                         shuffle=True)
 val_loader = DataLoader(dataset=val_dataset, batch_size=BATCH_SIZE, 
-                        shuffle=False)
+                        shuffle=True)

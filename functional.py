@@ -2,7 +2,11 @@ import torch
 
 def sigmoid(x):
 
-    return 1/(1+torch.exp(-x))
+    h = 1/(1+torch.exp(-x))
+    h[h==1] = 1 - 1e-5
+    h[h==0] = 1e-5
+
+    return h
 
 def d_sigmoid(x):
 
@@ -10,16 +14,18 @@ def d_sigmoid(x):
 
 def relu(x):
 
-    x[x<0] = 0
+    h = x.clone()
+    h[h<0] = 0
 
-    return x
+    return h
 
 def d_relu(x):
 
-    x[x>=0] = 1
-    x[x<0] = 0
+    h = x.clone()
+    h[h>=0] = 1
+    h[h<0] = 0
 
-    return x
+    return h
 
 def tanh(x):
 
@@ -35,7 +41,6 @@ def softmax(x):
     h = torch.exp(h)
 
     sum = torch.sum(h, dim = 1, keepdim = True)
-
     h/=sum
 
     return h
@@ -45,12 +50,13 @@ def softmax(x):
 # Output layer activation function is softmax
 def d_softmax(y, y_hat):
 
+    device = y.device
     k = y_hat.shape[1]
 
-    e_l = torch.eye(k)
+    e_l = torch.eye(k, device=device)
     e_l = e_l[y]
 
-    res = -(e_l - y_hat)
+    res = y_hat - e_l
 
     return res
 
@@ -58,8 +64,9 @@ def cross_entropy(y, y_hat):
 
     k = y_hat.shape[1]
     b = y_hat.shape[0]
+    device = y.device
 
-    e_l = torch.eye(k)
+    e_l = torch.eye(k, device=device)
     e_l = e_l[y]
 
     log_y_hat = torch.log(y_hat)
@@ -83,3 +90,8 @@ functions = {
     "d_softmax": d_softmax,
     "cross_entropy": cross_entropy
 }
+
+# import matplotlib.pyplot as plt
+
+# plt.plot(d_relu(torch.linspace(-10,10,10000)))
+# plt.show()

@@ -1,16 +1,29 @@
 import torch
 from functional import functions as F
 import math
+import torch.nn as nn
+import torch.nn.functional as f
 
-model_params = {
+class pytorch(nn.Module):
 
-    "loss": "cross_entropy",
-    "layer_config": [500, 250, 100],
-    "activation": "relu",
-    "output": "softmax",
-    "input_layer_size" : 28*28,
-    "output_layer_size" : 10
-}
+    def __init__(self, num_labels):
+        super(pytorch, self).__init__()
+
+        self.fc1 = nn.Linear(28*28, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64,32)
+        self.fc4 = nn.Linear(32,num_labels)    
+
+    def forward(self, x):
+
+        x = x.view(x.shape[0], -1)
+
+        x = f.relu(self.fc1(x))
+        x = f.relu(self.fc2(x))
+        x = f.relu(self.fc3(x))
+        x = self.fc4(x)
+        
+        return x
 
 class scratch:
 
@@ -19,21 +32,24 @@ class scratch:
         self.layer_config = model_params['layer_config']
         self.activation = F[model_params['activation']]
         self.output_function = F[model_params['output']]
+        self.d_output_function = F["d_"+model_params['output']]
+        self.d_activation = F["d_"+model_params['activation']]
         self.input_size = model_params['input_layer_size']
         self.output_size = model_params['output_layer_size']
+        self.lr = model_params["learning_rate"]
+        self.weight_decay = model_params["weight_decay"]
 
         # Total number of layers
         self.L = len(self.layer_config) + 2
 
         # 0 indexing convention
-        self.W = [0]*(self.L-1)
-        self.b = [0]*(self.L-1)
+        self.W = [0]*(self.L)
+        self.b = [0]*(self.L)
         self.a = [0]*(self.L)
         self.h = [0]*(self.L-1)
 
-        self.init_weights()
-
-    def init_weights(self):
+        self.del_W = [0]*(self.L)
+        self.del_b = [0]*(self.L)
 
         layer_config = self.layer_config
         layer_config.append(self.output_size)
@@ -48,20 +64,15 @@ class scratch:
             dist = torch.distributions.uniform.Uniform(-M, M)
             weights = dist.sample(sample_shape=(fan_out, fan_in))
             biases = dist.sample(sample_shape=(fan_out, ))
-            self.W[i] = weights
-            self.b[i] = biases
-
-        # for i in range(self.L-1):
-
-        #     print(self.W[i].shape)
-        #     print(self.b[i].shape)
+            self.W[i+1] = weights
+            self.b[i+1] = biases
 
     # If cuda is available
     def to(self, device):
 
         if(device=='cuda'):
 
-            for i in range(len(self.W)):
+            for i in range(1, len(self.W)):
 
                 self.W[i] = self.W[i].to(device)
                 self.b[i] = self.b[i].to(device)
@@ -70,25 +81,93 @@ class scratch:
 
         L = self.L
 
-        # X is expected to be of size (batch_size, flattened_vector_size)
         x = X.view(X.shape[0], -1)
         self.h[0] = x
 
         for i in range(1, L-1):
 
-            self.a[i] = self.h[i-1] @ self.W[i-1].T + self.b[i-1]
+            self.a[i] = self.h[i-1] @ self.W[i].T + self.b[i]
             self.h[i] = self.activation(self.a[i])
-            # print(self.a[i].shape, self.h[i].shape)
 
-        self.a[L-1] = self.h[L-2] @ self.W[L-2].T + self.b[L-2]
-        y_hat = self.output_function(self.a[L-1])
-
-        # print(y_hat.shape)
+        self.a[-1] = self.h[-1] @ self.W[-1].T + self.b[-1]
+        y_hat = self.output_function(self.a[-1])
 
         return y_hat
-        
+    
+    # Calculate gradients here
+    def backward(self, y, y_hat): 
+
+        L = self.L
+        a = self.a
+        h = self.h
+        W = self.W
+        b = self.b
+
+        dW = [0]*(L)
+        db = [0]*(L)
+
+        del_L_a = self.d_output_function(y, y_hat)
+
+        for i in range(L-1, 0, -1):
+
+            dW[i] = torch.bmm(del_L_a.unsqueeze(dim = 2), h[i-1].unsqueeze(dim = 1))
+            db[i] = del_L_a
+
+            if i == 1 : break
+
+            del_L_h = del_L_a @ W[i]
+            del_L_a = del_L_h * self.d_activation(a[i-1])
+            
+
+        for i in range(1, L):
+
+            dW[i] = dW[i].mean(dim = 0)
+            db[i] = db[i].mean(dim = 0)
+
+        self.del_W = dW
+        self.del_b = db
+
+    # Take a step in the direction against the gradient
+    def step(self):
+
+        lr = self.lr
+        weight_decay = self.weight_decay
+        L = self.L
+        W = self.W
+        b = self.b
+        dW = self.del_W
+        db = self.del_b
+
+        for i in range(L):
+
+            update_W = dW[i] + 2 * weight_decay * W[i]
+            update_b = db[i] 
+            W[i] = W[i] - lr * update_W
+            b[i] = b[i] - lr * update_b
+
+        self.W = W
+        self.b = b
+
+model_params = {
+
+    "loss": "cross_entropy",
+    "layer_config": [500, 250, 100],
+    "activation": "relu",
+    "output": "softmax",
+    "input_layer_size" : 28*28,
+    "output_layer_size" : 10,
+    "learning_rate" : 1e-2,
+    "weight_decay" : 0
+    
+}
+
 X = torch.randint(0,255, (4,28,28))/255
+y = torch.randint(0,10, (4,))
 model = scratch(model_params)
 model.to('cuda')
 X = X.to('cuda')
-print(model.forward(X).shape)
+y = y.to('cuda')
+
+output = model.forward(X)
+model.backward(y, output)
+model.step()
